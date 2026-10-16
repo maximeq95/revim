@@ -82,12 +82,12 @@ depend on catppuccin/nix.
 
 ## Use it
 
-In a NixOS flake with Home Manager (see `/etc/nixos-maxime`):
+In a NixOS flake with Home Manager (as [NixOs-Config](https://github.com/pchesneau/NixOs-Config) does):
 
 ```nix
 {
   inputs.revim = {
-    url = "…";
+    url = "github:maximeq95/revim";
     inputs.nixpkgs.follows = "nixpkgs";
     inputs.home-manager.follows = "home-manager";
   };
