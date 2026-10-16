@@ -1,134 +1,124 @@
-# CodIDE
+# revim
 
-A terminal IDE, packaged as a single Home Manager module: **yazi** as a file
-sidebar, **Neovim** (nixvim — every plugin pinned, no lazy.nvim, no Mason) as
-the editor, **zellij** holding the two together, plus **lazygit** and the
-`claude` CLI.
+Neovim configured with nixvim (every plugin, language server and formatter from
+nixpkgs: no plugin manager, no Mason), and an IDE around it: **yazi** as the file
+pane and Neovim side by side in a **zellij** tab, plus **lazygit** and Claude Code.
 
 ```
 ┌ files ┐┌──────── editor (nvim) ────────┐
-│ yazi  ││ [file1] │ [file2] │ [file3] … │  ← barbar tabline
-│       │├────────── terminal ───────────┤
-└───────┘└───────────────────────────────┘
+│ yazi  ││ [file1] │ [file2] │ [file3] … │  ← barbar tabs
+│       ││                               │
+├───────┴┴────────── terminal ───────────┤
+└────────────────────────────────────────┘
 ```
 
-Neovim runs with `--listen` on a per-session socket, so picking a file in yazi
-(or in the `fif` / `s` / `S` fuzzy searches) opens it as a buffer in the *same*
-Neovim instance instead of a new pane.
+Each IDE tab runs its own Neovim server: picking a file in yazi or in a picker
+opens it as a tab of the Neovim next to it.
 
-Everything is declarative: language servers, formatters and linters come from
-nixpkgs on Neovim's PATH — nothing is installed at runtime.
+## The package
+
+`pkgs/revim/package.nix` is a regular `callPackage` function, added to nixpkgs by
+the flake's `overlays.default` (composed with nixvim's overlay). It is built
+against the host's nixpkgs, which must allow the unfree `barbar.nvim` and
+`claude-code`, and tuned with `.override`:
+
+```nix
+pkgs.revim.override {
+  flavor = "latte"; # Catppuccin flavor
+  clipboard = "wl-copy"; # "osc52" (default), "pbcopy", "wl-copy" or null
+  extraConfig.opts.relativenumber = true; # any nixvim module
+}
+```
+
+It provides `nvim` (also as `vi` and `vim`) and `revim`:
+
+| Command              | What it does                                                                   |
+| -------------------- | ------------------------------------------------------------------------------ |
+| `revim [dir]`        | The IDE on a directory: a new tab inside zellij, else a `revim-<dir>` session. |
+| `revim file…`        | Edit, as `nvim file…`.                                                         |
+| `revim git [dir]`    | lazygit in a tab of its own.                                                   |
+| `revim grep [query]` | Live ripgrep search; Enter opens the match in the tab's Neovim.                |
+| `revim find`         | Fuzzy file picker; Enter opens the file in the tab's Neovim.                   |
+
+In the IDE: Enter or a click in yazi opens a file, `s` / `S` find a file / search
+contents, `Alt-t` adds a shell to the terminal stack, `Alt-q` closes the tab.
+`Ctrl` + arrows move to the pane in that direction, from any pane (`Ctrl-h/j/k/l`
+also do in Neovim, crossing its own windows first). In Neovim, `Tab` / `Shift-Tab` go to the next / previous file, and `:q` (`:wq`, `:x`) closes the file rather than the editor, asking first
+whether to save unsaved changes; `:qa` quits. Neovim has VSCode-style keys (`Ctrl-s`, `Ctrl-p`, `F12`, `Ctrl-/`…) and a which-key
+menu on `<space>`.
+
+[sops] files (YAML, JSON, dotenv, INI) open decrypted and save re-encrypted,
+through `sops edit`: their keys stay those of the file, and text sops rejects
+(invalid syntax…) leaves the file as it was. Their plaintext is kept out of
+swap and undo files and out of the selection Claude sees. sops finds its age
+identities as usual (`SOPS_AGE_KEY_FILE`, `~/.config/sops/age/keys.txt`…) plus,
+unless `SOPS_AGE_KEY_CMD` is set, the SSH key `~/.ssh/id_ed25519` (or
+`SOPS_AGE_SSH_PRIVATE_KEY_FILE`) converted by `ssh-to-age`, as sops-nix derives
+identities.
+
+[sops]: https://github.com/getsops/sops
+
+## The Home Manager module
+
+`homeModules.default` installs `pkgs.revim`, overridden from its options, and
+configures what the IDE runs in: yazi (opening files in the tab's Neovim),
+zellij (mouse, clipboard, keys) and lazygit.
+
+The theme is the host's. When it sets a Catppuccin one with [catppuccin/nix]
+(`catppuccin.enable`), Neovim takes its `catppuccin.flavor`, and yazi and lazygit
+its ports (flavor and accent); without one, Neovim stays Catppuccin Mocha. The
+zellij bars, bat and fzf are left to the host's own settings. revim does not
+depend on catppuccin/nix.
+
+| Option                        | Default   |                                                       |
+| ----------------------------- | --------- | ----------------------------------------------------- |
+| `programs.revim.enable`       | `false`   |                                                       |
+| `programs.revim.package`      | `pkgs.revim` | From the overlay.                                  |
+| `programs.revim.defaultEditor` | `false`  | `EDITOR` and `VISUAL` set to `nvim`.                  |
+| `programs.revim.clipboard`    | `"osc52"` | Neovim's `g:clipboard` and zellij's `copy_command`.   |
+| `programs.revim.extraConfig`  | `{ }`     | Extra nixvim configuration.                           |
+
+[catppuccin/nix]: https://github.com/catppuccin/nix
 
 ## Use it
 
-Add the flake as an input and import `homeModules.default` into a Home Manager
-configuration. Make it follow your nixpkgs so the IDE is built from the same
-revision as the rest of your host:
+In a NixOS flake with Home Manager (see `/etc/nixos-maxime`):
 
 ```nix
 {
-  inputs.codide = {
-    url = "github:Q-t1/CodIDE";
+  inputs.revim = {
+    url = "…";
     inputs.nixpkgs.follows = "nixpkgs";
+    inputs.home-manager.follows = "home-manager";
+  };
+
+  # in the NixOS configuration
+  nixpkgs.overlays = [ inputs.revim.overlays.default ];
+  home-manager.sharedModules = [ inputs.revim.homeModules.default ];
+
+  # in a Home Manager configuration
+  programs.revim = {
+    enable = true;
+    defaultEditor = true;
+    clipboard = "wl-copy";
+    # nixd completes the options of the host's flake
+    extraConfig.lsp.servers.nixd.config.settings.nixd.options.nixos.expr =
+      ''(builtins.getFlake "/etc/nixos").nixosConfigurations.nixos.options'';
   };
 }
 ```
-
-```nix
-# in a home.nix
-{ inputs, ... }:
-{
-  imports = [ inputs.codide.homeModules.default ];
-
-  programs.codingIde.clipboardProvider = "pbcopy";
-}
-```
-
-Nothing else is required: the module pulls its own `claude` build and pins
-nixvim's nixpkgs itself, so the importing host needs neither an overlay nor
-`nixpkgs.config.allowUnfree`.
-
-Then, in a shell:
-
-| Command          | What it does                                                 |
-|------------------|--------------------------------------------------------------|
-| `coding [dir]`   | Open the IDE on a directory (a new zellij session, or a tab inside one). A file argument just edits the file. |
-| `gitview [dir]`  | A full-screen lazygit tab.                                   |
-| `fif <pattern>`  | ripgrep + fzf content search; the pick opens at the matched line in the session's Neovim. |
-
-Inside the IDE: `Enter` in yazi opens a file in the editor, `s` / `S` are
-fuzzy file / content search, `Alt-t` adds a terminal tab, `Alt-q` closes a tab,
-and Neovim carries a VSCode-shaped keymap (`Ctrl-s` save, `Ctrl-p` quick open,
-`<leader>` is space).
-
-## Options
-
-All under `programs.codingIde`:
-
-| Option | Default | What it is |
-|--------|---------|------------|
-| `clipboardProvider` | `"osc52"` | How Neovim and zellij reach the system clipboard: `"wsl"` (WSLg `wl-copy`, falling back to `clip.exe`), `"pbcopy"` (macOS), `"osc52"` (terminal escapes — works headless / over SSH), `"none"` (leave Neovim's autodetection alone). Only `"wsl"` pulls in the Linux-only `wl-clipboard`. |
-| `claudeCode.enable` | `true` | Put `claude` on the shell's and Neovim's PATH (claudecode.nvim drives it in-editor). |
-| `claudeCode.package` | this flake's `claude-code` input | Which `claude` build to use — set it to `pkgs.claude-code` on a host that already overlays one in. |
-| `nixd.nixpkgsExpr` | `import <this flake's nixpkgs> { }` | The nixpkgs instance nixd completes `pkgs.*` against. |
-| `nixd.options` | `{ }` | Option sets nixd completes against, as `name -> nix expression`. |
-
-### Wiring nixd at your own config
-
-Out of the box nixd does evaluation, `pkgs.*` completion and go-to-definition.
-To also complete *options* — `programs.` in a `home.nix`, `services.` in a
-`configuration.nix` — point it at your own flake's outputs. nixd's names matter
-here: `nixos` drives `configuration.nix` files, `home-manager` drives
-`home.nix` files.
-
-For a NixOS host with Home Manager embedded in it:
-
-```nix
-programs.codingIde.nixd = {
-  nixpkgsExpr = ''import (builtins.getFlake "${inputs.self}").inputs.nixpkgs { }'';
-  options = {
-    nixos = ''(builtins.getFlake "${inputs.self}").nixosConfigurations.myhost.options'';
-    home-manager = ''(builtins.getFlake "${inputs.self}").nixosConfigurations.myhost.options.home-manager.users.type.getSubOptions [ ]'';
-  };
-};
-```
-
-For a standalone Home Manager host:
-
-```nix
-programs.codingIde.nixd.options.home-manager =
-  ''(builtins.getFlake "${inputs.self}").homeConfigurations.myhost.options'';
-```
-
-`${inputs.self}` is the flake's store path — a pinned snapshot, which is fine:
-option *names* come from the modules, not from your values.
 
 ## Hack on it
 
 ```
-nix fmt                    # nixfmt over the tree
-nix flake check            # builds the IDE for a dummy user on this system
+nix run . -- file.txt  # try the editor
+nix fmt                # nixfmt over the tree
+nix flake check        # builds the Home Manager module for a throwaway user
 ```
 
-`nix flake check` is heavy — it builds Neovim with every plugin, LSP and
-formatter — but it is the cheapest way to catch an option rename in nixvim or
-Home Manager before a host does. `lib.mkExampleHome { system = "..."; }` is the
-same thing, and takes extra `modules` if you want to try an option out.
-
-To test an uncommitted change from a flake that consumes this one:
-
-```
---override-input codide path:/Users/quentin/Projects/CodIDE
-```
-
-## Layout
-
-| Path | What |
-|------|------|
-| `flake.nix` | Inputs, `homeModules.default`, `checks`, `lib.mkExampleHome` |
-| `modules/coding-ide/default.nix` | The options, the yazi sidebar, the zellij layouts and chrome, the `coding` / `gitview` / `fif` shell functions |
-| `modules/coding-ide/nvim.nix` | The editor: nixvim plugins, LSPs, formatters, linters, keymaps |
-
-Both module files take this flake's inputs by closure (`flakeInputs`) rather
-than through a `specialArgs` named `inputs`, so they compose with any consuming
-flake whatever it calls its own arguments.
+| Path                               | What                                                     |
+| ---------------------------------- | -------------------------------------------------------- |
+| `pkgs/revim/package.nix`           | The package: Neovim and the `revim` command              |
+| `pkgs/revim/nvim.nix`              | The nixvim module: plugins, language servers, keymaps    |
+| `pkgs/revim/revim.sh`, `layout.kdl` | The `revim` command and its zellij layout               |
+| `modules/home-manager/`            | The Home Manager module; yazi's mouse handling in `yazi.lua` |

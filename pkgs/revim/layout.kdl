@@ -1,0 +1,22 @@
+// The IDE tab: yazi and Neovim side by side, above a full-width terminal stack.
+// zellij's own tab bar, so the chrome follows the zellij theme; no status bar.
+layout {
+    default_tab_template {
+        pane size=1 borderless=true {
+            plugin location="tab-bar"
+        }
+        children
+    }
+    // `revim nvim` renames it "revim: <folder>".
+    tab name="revim" focus=true {
+        pane size="80%" split_direction="vertical" {
+            pane size="24%" name="files" command="yazi" focus=true
+            pane name="editor" command="revim" {
+                args "nvim"
+            }
+        }
+        pane stacked=true {
+            pane name="terminal"
+        }
+    }
+}
