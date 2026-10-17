@@ -40,7 +40,9 @@ It provides `nvim` (also as `vi` and `vim`) and `revim`:
 | `revim grep [query]` | Live ripgrep search; Enter opens the match in the tab's Neovim.                |
 | `revim find`         | Fuzzy file picker; Enter opens the file in the tab's Neovim.                   |
 
-In the IDE: Enter or a click in yazi opens a file, `s` / `S` find a file / search
+In the IDE: in yazi, Enter or a left click opens a file and enters a folder, a
+right click goes up, and the path in the header is a breadcrumb — clicking one of
+its folders goes there; `s` / `S` find a file / search
 contents, `Alt-t` adds a shell to the terminal stack, `Alt-q` closes the tab.
 `Ctrl` + arrows move to the pane in that direction, from any pane (`Ctrl-h/j/k/l`
 also do in Neovim, crossing its own windows first). In Neovim, `Tab` / `Shift-Tab` go to the next / previous file, and `:q` (`:wq`, `:x`) closes the file rather than the editor, asking first
@@ -121,4 +123,4 @@ nix flake check        # builds the Home Manager module for a throwaway user
 | `pkgs/revim/package.nix`           | The package: Neovim and the `revim` command              |
 | `pkgs/revim/nvim.nix`              | The nixvim module: plugins, language servers, keymaps    |
 | `pkgs/revim/revim.sh`, `layout.kdl` | The `revim` command and its zellij layout               |
-| `modules/home-manager/`            | The Home Manager module; yazi's mouse handling in `yazi.lua` |
+| `modules/home-manager/`            | The Home Manager module; yazi's mouse and header in `yazi.lua`, its `<Enter>` in `smart-enter.lua` |

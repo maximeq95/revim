@@ -106,7 +106,19 @@ in
               }
             ];
           };
+          # `<Enter>` on a folder enters it, as `<Right>` and a click do,
+          # instead of handing it to the `edit` opener below.
+          plugins.smart-enter = pkgs.writeTextFile {
+            name = "smart-enter.yazi";
+            destination = "/main.lua";
+            text = builtins.readFile ./smart-enter.lua;
+          };
           keymap.mgr.prepend_keymap = [
+            {
+              on = "<Enter>";
+              run = "plugin smart-enter";
+              desc = "Enter the folder, or open the file";
+            }
             {
               on = "s";
               run = "shell 'revim find' --block";
